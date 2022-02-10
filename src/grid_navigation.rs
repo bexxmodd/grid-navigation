@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque, BinaryHeap};
+use priq::PriorityQueue;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Ord, PartialOrd)]
 pub struct Location(usize, usize);
@@ -64,14 +65,14 @@ impl WeighterGrid {
 
 pub fn a_star_search(grid: &WeighterGrid, start: &Location, goal: &Location)
     -> VecDeque<Location> {
-        let mut frontier = BinaryHeap::new();
-        frontier.push(Reverse((0, start.clone())));
+        let mut frontier: PriorityQueue<f32, Location> = PriorityQueue::new();
+        frontier.put(0.0, start.clone());
         let mut came_from: HashMap<Location, Option<Location>> = HashMap::new();
         let mut gscore_so_far: HashMap<Location, f32> = HashMap::new();
         came_from.insert(start.clone(), None); 
 
         while frontier.is_empty() {
-            let current = frontier.pop().unwrap().0;
+            let current = frontier.pop().unwrap();
             if current.1 == *goal {
                 return WeighterGrid::reconstruct_path(&came_from, &start, &goal);
             }
@@ -82,7 +83,7 @@ pub fn a_star_search(grid: &WeighterGrid, start: &Location, goal: &Location)
                 if gscore_so_far.get(&neighbor).is_none()
                     || tent_gscore < gscore_so_far[&neighbor] {
                     gscore_so_far.insert(neighbor.clone(), tent_gscore);
-                    frontier.push(Reverse((tent_gscore as i32, neighbor.clone())));
+                    frontier.put(tent_gscore, neighbor.clone());
                 }
             }
         }
