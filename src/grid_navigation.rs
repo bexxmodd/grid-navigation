@@ -1,119 +1,93 @@
-use std::cmp::Reverse;
-use std::collections::{HashMap, VecDeque, BinaryHeap};
+use std::collections::{HashSet, HashMap, VecDeque};
 use priq::PriorityQueue;
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug, Ord, PartialOrd)]
-pub struct Location(usize, usize);
-
-pub struct WeighterGrid {
-    rows: usize,
-    columns: usize,
-    weights: HashMap<Location, f32>,
+#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
+pub struct Vertex {
+    x: usize,
+    y: usize,
 }
 
-impl WeighterGrid {
-    pub fn new(rows: usize, columns: usize) -> Self {
-        WeighterGrid { rows, columns, weights: HashMap::new() }
-    }
-
-    pub fn cost(&self, from: &Location, to: &Location) -> f32 {
-        *self.weights.get(to).unwrap_or(&1.0)
-    }
-
-    pub fn neighbors(&self, loc: &Location) -> Vec<Location> {
-        let x = loc.0;
-        let y = loc.1;
-        let neighbors = vec![(x + 1, y), (x - 1, y), (x, y - 1), (x, y + 1)];
-        neighbors.iter()
-                 .filter(|(x, y)| self.in_bounds(&Location(*x, *y))
-                     && self.passable(&Location(*x, *y)))
-                 .map(|(x, y)| Location(*x, *y))
-                 .collect()
-    }
-
-    pub fn reconstruct_path(came_from: &HashMap<Location, Option<Location>>,
-        start: &Location, goal: &Location) -> VecDeque<Location> {
-        let mut current = goal;
-        let mut path = VecDeque::new();
-
-        while current != start {
-            let key = &came_from[current];
-            if let Some(k) = key {
-                current = k;
-            } else {
-                return path
-            }
-            path.push_front(current.clone());
-        }
-        path
-    }
-
-    pub fn heuristic(from: &Location, to: &Location) -> f32 {
-        (from.0 as f32 - to.0 as f32).abs()
-            + (from.1 as f32 - to.1 as f32).abs()
-    }
-
-    fn in_bounds(&self, loc: &Location) -> bool {
-        loc.0 < self.rows && loc.1 < self.columns
-    }
-
-    fn passable(&self, loc: &Location) -> bool {
-        // TODO: add Grid member to the struct
-       true 
+impl Vertex {
+    pub fn new(x: usize, y: usize) -> Self {
+        Vertex { x, y }
     }
 }
 
-pub fn a_star_search(grid: &WeighterGrid, start: &Location, goal: &Location)
-    -> VecDeque<Location> {
-        let mut frontier: PriorityQueue<f32, Location> = PriorityQueue::new();
-        frontier.put(0.0, start.clone());
-        let mut came_from: HashMap<Location, Option<Location>> = HashMap::new();
-        let mut gscore_so_far: HashMap<Location, f32> = HashMap::new();
-        came_from.insert(start.clone(), None); 
+#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
+pub struct Edge { 
+    pub from: Vertex, 
+    pub to: Vertex
+}
 
-        while frontier.is_empty() {
-            let current = frontier.pop().unwrap();
-            if current.1 == *goal {
-                return WeighterGrid::reconstruct_path(&came_from, &start, &goal);
+pub struct Graph {
+    pub vertices: HashSet<Vertex>,
+    pub edges: HashSet<Edge>,
+}
+
+pub trait GraphNavigation {
+    fn neighbors(&self, vertex: Vertex) -> HashSet<Vertex>;
+    fn get_valid_edges(&self, vertex: Vertex) -> Vec<Vertex>;
+    fn backtrace(&self, came_from: &mut HashMap<Vertex, Vertex>,
+        start: Vertex, end: Vertex) -> Vec<Vertex>;
+
+    fn bfs(&self, start: Vertex, goal: Vertex) -> Option<Vec<Vertex>> {
+        let mut came_from = HashMap::<Vertex, Vertex>::new();
+        let mut visisted = HashSet::<Vertex>::new();
+        let mut frontier = VecDeque::<Vertex>::new();
+        frontier.push_front(start);
+
+        loop {
+            if frontier.is_empty() {
+                    return None
+                }
+            let current = frontier.pop_back().unwrap();
+            if current == goal {
+                return Some(self.backtrace(&mut came_from, start, goal))
             }
 
-            for neighbor in grid.neighbors(&current.1) {
-                let tent_gscore = gscore_so_far[&current.1]
-                    + grid.cost(&current.1, &neighbor);
-                if gscore_so_far.get(&neighbor).is_none()
-                    || tent_gscore < gscore_so_far[&neighbor] {
-                    gscore_so_far.insert(neighbor.clone(), tent_gscore);
-                    frontier.put(tent_gscore, neighbor.clone());
+            for neighbor in self.neighbors(current) {
+                if !visisted.contains(&neighbor) {
+                    came_from.insert(neighbor, current);
+                    frontier.push_front(neighbor);
+                    visisted.insert(neighbor);
                 }
             }
         }
-
-        VecDeque::new()
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+impl Graph {
+    pub fn new(vertices: HashSet<Vertex>, edges: HashSet<Edge>) -> Self {
+        Graph { vertices, edges }
+    }
+}
 
-    #[test]
-    fn grid_cost_simple() {
-        let grid = WeighterGrid::new(5, 5);
-        assert_eq!(1.0, grid.cost(&Location(2, 2), &Location(3, 2)));
+
+impl GraphNavigation for Graph {
+    fn backtrace(&self, came_from: &mut HashMap<Vertex, Vertex>,
+        start: Vertex, end: Vertex) -> Vec<Vertex> {
+        let mut path = vec![end];
+        while path[path.len() - 1] != start {
+            let cur_ = came_from.remove(&path[path.len() - 1]).unwrap();
+            path.push(cur_);
+        }
+        path.reverse();
+        path
     }
 
-    #[test]
-    fn reconstruct_path() {
-        let mut path = HashMap::new();
-        path.insert(Location(0, 1), Some(Location(0, 0)));
-        let mut expected = VecDeque::new();
-        expected.push_front(Location(0, 0));
-        assert_eq!(expected, WeighterGrid::reconstruct_path(
-                &path, &Location(0, 0), &Location(0, 1)));
+    fn neighbors(&self, vertex: Vertex) -> HashSet<Vertex> {
+        let neighs_ = self.get_valid_edges(vertex);
+        neighs_.into_iter()
+               .filter(|v| self.edges.contains(&Edge { from: vertex, to: *v }))
+               .collect()
     }
 
-    #[test]
-    fn heuristic_md() {
-        assert_eq!(2.0,
-            WeighterGrid::heuristic(&Location(1, 1), &Location(2, 2)));
+    fn get_valid_edges(&self, vertex: Vertex) -> Vec<Vertex> {
+        let x = vertex.x;
+        let y = vertex.y;
+        let mut res = vec![ Vertex::new(x, y + 1), Vertex::new(x + 1, y)];
+        if x > 0 { res.push(Vertex::new(x - 1, y)) };
+        if y > 0 { res.push(Vertex::new(x, y - 1)) };
+        res
     }
 }
