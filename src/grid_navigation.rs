@@ -1,10 +1,18 @@
 use std::collections::{HashSet, HashMap, VecDeque};
+
+#[allow(unused_imports)]
 use priq::PriorityQueue;
 
 #[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
 pub struct Vertex {
     x: usize,
     y: usize,
+}
+
+impl From<(usize, usize)> for Vertex {
+    fn from(tup: (usize, usize)) -> Self {
+        Vertex { x: tup.0, y: tup.1  }
+    }
 }
 
 impl Vertex {
